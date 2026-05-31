@@ -1,6 +1,4 @@
 [theme]
-# Light theme with an Anthropic-leaning palette that matches the
-# architecture-diagram swatches used inside the app.
 base = "light"
 primaryColor = "#534AB7"
 backgroundColor = "#FFFFFF"
