@@ -659,41 +659,52 @@ def gradient_styler(
     return df.style.apply(_shade, axis=0)
 
 
-def apply_plotly_layout(fig, height: int = 320, title: str | None = None):
+def apply_plotly_layout(fig, height: int = 340, title: str | None = None):
     fig.update_layout(
         height=height,
         title=dict(
             text=title or "",
-            font=dict(size=14, color=CHART["ink"]),
+            font=dict(size=15, color=CHART["ink"], family=CHART_FONT),
             x=0.0, xanchor="left", y=0.97,
         ) if title else None,
-        margin=dict(l=16, r=16, t=48 if title else 26, b=44),
+        margin=dict(l=20, r=22, t=58 if title else 40, b=52),
         paper_bgcolor=CHART["surface"],
         plot_bgcolor=CHART["surface"],
-        font=dict(family=CHART_FONT, color=CHART["ink"], size=12),
+        font=dict(family=CHART_FONT, color=CHART["ink"], size=13),
         colorway=[
             CHART["violet"], CHART["sky"], CHART["emerald"],
             CHART["amber"], CHART["crimson"], CHART["slate"],
         ],
+        hovermode="x unified",
         hoverlabel=dict(
-            bgcolor=CHART["ink"], bordercolor=CHART["ink"],
+            bgcolor="rgba(11,15,26,0.92)", bordercolor="rgba(11,15,26,0.92)",
             font=dict(color="#FFFFFF", family=CHART_MONO, size=12),
         ),
         xaxis=dict(
             gridcolor=CHART["grid"], zerolinecolor=CHART["line"],
-            linecolor=CHART["line"], ticks="outside",
+            linecolor=CHART["line"], ticks="outside", ticklen=5,
             tickcolor=CHART["line"], tickfont=dict(color=CHART["muted"]),
+            title_font=dict(size=12, color=CHART["muted"]),
+            title_standoff=12, automargin=True,
+            showspikes=True, spikemode="across", spikesnap="cursor",
+            spikecolor=CHART["muted"], spikethickness=1, spikedash="dot",
         ),
         yaxis=dict(
             gridcolor=CHART["grid"], zerolinecolor=CHART["line"],
-            linecolor=CHART["line"], ticks="outside",
+            linecolor=CHART["line"], ticks="outside", ticklen=5,
             tickcolor=CHART["line"], tickfont=dict(color=CHART["muted"]),
+            title_font=dict(size=12, color=CHART["muted"]),
+            title_standoff=12, automargin=True,
         ),
         legend=dict(
-            orientation="h", yanchor="bottom", y=1.02,
-            xanchor="left", x=0,
-            bgcolor="rgba(255,255,255,0.6)", bordercolor=CHART["line"],
-            borderwidth=1, font=dict(size=11, color=CHART["muted"]),
+            orientation="h", yanchor="bottom", y=1.04,
+            xanchor="left", x=0, itemsizing="constant",
+            bgcolor="rgba(255,255,255,0.0)", borderwidth=0,
+            font=dict(size=12, color=CHART["ink"]),
         ),
+    )
+    fig.update_traces(
+        selector=dict(type="scatter"),
+        marker=dict(line=dict(width=1.0, color=CHART["surface"])),
     )
     return fig
