@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTD/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    User-level launchd job for the stgnn pipeline.
+
+    INSTALL (one-time):
+
+      # Edit WorkingDirectory + the python path below to match your machine.
+      cp scripts/com.aarthy.stgnn.plist ~/Library/LaunchAgents/
+      launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.aarthy.stgnn.plist
+
+    TRIGGER A RUN (RunAtLoad is false — KeepAlive is false — so this
+    only runs when you ask it to):
+
+      launchctl kickstart -k gui/$(id -u)/com.aarthy.stgnn
+
+    CHECK STATUS:
+
+      launchctl print gui/$(id -u)/com.aarthy.stgnn | head -40
+      tail -f artefacts/runs/launchd.out
+
+    UNINSTALL:
+
+      launchctl bootout gui/$(id -u)/com.aarthy.stgnn
+      rm ~/Library/LaunchAgents/com.aarthy.stgnn.plist
+
+    Notes:
+     - launchd jobs ignore Terminal sleep — the job keeps running even
+       if you log out (gui session) or close the laptop lid for short
+       periods. For long lid-close runs combine with the caffeinate
+       wrapper in scripts/run_background.sh.
+     - ProcessType=Background tells the scheduler this is non-interactive.
+     - LowPriorityIO so it doesn't fight the rest of the UI.
+  -->
+
+  <key>Label</key>
+  <string>com.aarthy.stgnn</string>
+
+  <key>WorkingDirectory</key>
+  <!-- REPLACE THIS PATH if you move the project. -->
+  <string>/Users/aarthy/projects/nwu/stgnn_fraud</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/caffeinate</string>
+    <string>-i</string>
+    <string>-m</string>
+    <string>-s</string>
+    <!-- The CLI runner. Add/remove flags here to change what runs. -->
+    <string>/Users/aarthy/projects/nwu/stgnn_fraud/.venv/bin/python</string>
+    <string>-m</string>
+    <string>scripts.run_pipeline</string>
+    <string>--note</string>
+    <string>launchd</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PYTHONUNBUFFERED</key>
+    <string>1</string>
+    <key>STREAMLIT_HEADLESS</key>
+    <string>1</string>
+  </dict>
+
+  <!-- Logs. tail -f these to watch a run. -->
+  <key>StandardOutPath</key>
+  <string>/Users/aarthy/projects/nwu/stgnn_fraud/artefacts/runs/launchd.out</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/aarthy/projects/nwu/stgnn_fraud/artefacts/runs/launchd.err</string>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>KeepAlive</key>
+  <false/>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <key>LowPriorityIO</key>
+  <true/>
+
+  <key>Nice</key>
+  <integer>5</integer>
+</dict>
+</plist>

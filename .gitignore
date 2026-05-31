@@ -1,0 +1,38 @@
+# ─── Virtual environments ───────────────────────────────
+.venv/
+venv/
+env/
+
+# ─── Python caches / build ──────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# ─── Secrets / local config ─────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ─── IDE / editor / OS cruft ────────────────────────────
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ─── Generated outputs / artefacts ──────────────────────
+artefacts/
+*.log
+*.txt
+!requirements.txt
+
+# Streamlit local state
+.streamlit/secrets.toml
+
+# ─── Keep data folder (overrides nothing; tracked by default) ───
+!data/
+!data/**

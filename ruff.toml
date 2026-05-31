@@ -1,0 +1,14 @@
+line-length = 88
+target-version = "py310"
+
+[lint]
+select = ["E", "F", "W", "I"]
+
+[lint.per-file-ignores]
+"app/main.py" = ["E402"]
+"scripts/run_pipeline.py" = ["E402"]
+"scripts/export_tsne_layers.py" = ["E402"]
+"scripts/export_saliency.py" = ["E402"]
+"scripts/build_dashboard.py" = ["E501"]
+"scripts/diagnose.py" = ["E501"]
+"training/*.py" = ["E402"]
