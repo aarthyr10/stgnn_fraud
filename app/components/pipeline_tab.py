@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 
@@ -749,11 +750,25 @@ def _render_run(
     return metrics
 
 
+def _display_only() -> bool:
+    return os.getenv("STGNN_DISPLAY_ONLY", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+
+
 def render_pipeline_tab(
     artefact_paths: dict, data_dir: str, graph_cache: str,
 ) -> None:
     st.markdown('<h2 style="margin-top:0">Pipeline</h2>',
                 unsafe_allow_html=True)
+
+    if _display_only():
+        st.info(
+            "Display-only deployment. Training runs are executed locally "
+            "and the results are published here. Open the Results and "
+            "Dashboard tabs for the latest published metrics."
+        )
+        return
 
     with st.expander("Tracker settings", expanded=False):
         cols = st.columns(4)
