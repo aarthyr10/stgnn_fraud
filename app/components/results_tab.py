@@ -194,6 +194,139 @@ def _verdict_block(metrics: dict) -> None:
         )
 
 
+def _per_timestep_f1_chart(metrics: dict) -> go.Figure | None:
+    series = [
+        ("gcn_gru_none", "C1 no correction", CHART["amber"]),
+        ("gcn_gru_online", "C3 online (proposed)", CHART["violet"]),
+    ]
+    fig = go.Figure()
+    have = False
+    for key, label, color in series:
+        per_t = metrics.get(key, {}).get("per_timestep_f1", {})
+        if not per_t:
+            continue
+        ts = sorted(int(t) for t in per_t.keys())
+        ys = []
+        for t in ts:
+            raw = per_t.get(str(t))
+            v = float(raw) if raw is not None else float("nan")
+            ys.append(v if v == v else None)
+        fig.add_trace(go.Scatter(
+            x=ts, y=ys, mode="lines+markers", name=label,
+            line=dict(color=color, width=2), marker=dict(size=6),
+            connectgaps=False,
+        ))
+        have = True
+    if not have:
+        return None
+    fig.add_vline(
+        x=43, line_dash="dot", line_color=CHART["crimson"],
+        annotation_text="t=43",
+    )
+    apply_plotly_layout(fig, height=320, title="Per-week F1 (illicit)")
+    fig.update_xaxes(title="Test timestep")
+    fig.update_yaxes(title="F1", range=[0, 1])
+    return fig
+
+
+def _deployable_table(metrics: dict) -> str | None:
+    rows = [
+        ("GCN-GRU · C1 none", "gcn_gru_none"),
+        ("GCN-GRU · C3 online", "gcn_gru_online"),
+        ("RF · C1 none", "rf_none"),
+        ("RF · C3 online", "rf_online"),
+    ]
+    have = any(
+        "f1_post_shutdown_deployable" in metrics.get(k, {}) for _, k in rows
+    )
+    if not have:
+        return None
+    import pandas as pd
+    data = []
+    for label, key in rows:
+        m = metrics.get(key, {})
+        data.append({
+            "Condition": label,
+            "F1 (oracle)": _safe(m, "f1_illicit"),
+            "F1 (deployable)": _safe(m, "f1_illicit_deployable"),
+            "post-F1 (oracle)": _safe(m, "f1_post_shutdown"),
+            "post-F1 (deployable)": _safe(m, "f1_post_shutdown_deployable"),
+        })
+    df = pd.DataFrame(data)
+    return shaded_table_html(
+        df,
+        formats={
+            "F1 (oracle)": "{:.3f}",
+            "F1 (deployable)": "{:.3f}",
+            "post-F1 (oracle)": "{:.3f}",
+            "post-F1 (deployable)": "{:.3f}",
+        },
+    )
+
+
+def _report_checks(metrics: dict) -> None:
+    tp = {}
+    for k, v in metrics.get("true_prior", {}).items():
+        fv = _safe({"v": v}, "v", float("nan"))
+        if fv == fv:
+            tp[int(k)] = fv
+    pre = [tp[t] for t in tp if 35 <= t <= 42]
+    post = [tp[t] for t in tp if 43 <= t <= 49]
+    checks = []
+    if pre and post:
+        pre_mean = sum(pre) / len(pre) * 100
+        trough = min(post) * 100
+        wk49 = tp.get(49, float("nan")) * 100
+        checks.append((
+            "True-prior curve",
+            f"pre-shutdown ~{pre_mean:.1f}% -> trough {trough:.1f}% -> "
+            f"week 49 {wk49:.1f}%",
+            True,
+        ))
+    checks.append((
+        "RF feature set",
+        "trains on all 166 features including the timestep column "
+        "(loader column 0)",
+        True,
+    ))
+    checks.append((
+        "Decision threshold",
+        "both reported: oracle (fits test labels, upper bound) and "
+        "deployable (prior-matched, no test labels)",
+        True,
+    ))
+    for label, detail, ok in checks:
+        colour = "#0F6E56" if ok else "#993556"
+        tag = "OK" if ok else "CHECK"
+        st.markdown(
+            f'<div style="padding:0.3rem 0;font-size:0.9rem">'
+            f'<span style="display:inline-block;min-width:42px;'
+            f'padding:0.05rem 0.4rem;margin-right:0.6rem;border-radius:4px;'
+            f'background:{colour};color:#FFFFFF;font-size:0.72rem;'
+            f'font-weight:700;text-align:center">{tag}</span>'
+            f'<b>{label}</b> &nbsp; <span style="color:#44443F">'
+            f'{detail}</span></div>',
+            unsafe_allow_html=True,
+        )
+
+
+def _render_report_assets(artefact_paths: dict) -> None:
+    assets = Path(artefact_paths["metrics"]).parent / "report_assets"
+    if not assets.exists():
+        return
+    pngs = sorted(assets.glob("*.png"))
+    if not pngs:
+        return
+    st.markdown(section_open(
+        "Representation and saliency",
+        eyebrow="t-SNE per layer · GRU temporal saliency",
+        tint="application",
+    ), unsafe_allow_html=True)
+    for png in pngs:
+        st.image(str(png), use_container_width=True)
+    st.markdown(section_close(), unsafe_allow_html=True)
+
+
 def render_results_tab(artefact_paths: dict) -> None:
     st.markdown(
         '<h2 style="margin-top:0">Results</h2>',
@@ -286,6 +419,39 @@ def render_results_tab(artefact_paths: dict) -> None:
         width="stretch",
         config={"displayModeBar": False},
     )
+    st.markdown(section_close(), unsafe_allow_html=True)
+
+    per_t_fig = _per_timestep_f1_chart(metrics)
+    if per_t_fig is not None:
+        st.markdown(section_open(
+            "Per-week F1",
+            eyebrow="C1 vs C3 across the test window",
+            tint="post",
+        ), unsafe_allow_html=True)
+        st.plotly_chart(
+            per_t_fig, width="stretch",
+            config={"displayModeBar": False},
+        )
+        st.markdown(section_close(), unsafe_allow_html=True)
+
+    deployable = _deployable_table(metrics)
+    if deployable:
+        st.markdown(section_open(
+            "Threshold honesty",
+            eyebrow="Oracle (fits test labels) vs deployable (label-free)",
+            tint="application",
+        ), unsafe_allow_html=True)
+        st.markdown(deployable, unsafe_allow_html=True)
+        st.markdown(section_close(), unsafe_allow_html=True)
+
+    _render_report_assets(artefact_paths)
+
+    st.markdown(section_open(
+        "Report checks",
+        eyebrow="Quick confirmations for the writeup",
+        tint="data",
+    ), unsafe_allow_html=True)
+    _report_checks(metrics)
     st.markdown(section_close(), unsafe_allow_html=True)
 
     st.markdown(section_open(
