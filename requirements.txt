@@ -1,3 +1,7 @@
+# Install CPU-only torch wheels (keeps the Streamlit Cloud build under its
+# disk limit; harmless on macOS/Windows, which resolve CPU wheels anyway).
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 # Streamlit and runtime
 streamlit>=1.31
 plotly>=5.18
