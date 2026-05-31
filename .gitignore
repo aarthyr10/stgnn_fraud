@@ -35,3 +35,4 @@ artefacts/*
 
 *.md
 !README.md
+data/.DS_Store
