@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: stgnn-fraud
+    runtime: docker
+    plan: standard
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /_stcore/health
+    autoDeploy: true
+    envVars:
+      - key: STREAMLIT_SERVER_HEADLESS
+        value: "true"
+      - key: STREAMLIT_BROWSER_GATHERUSAGESTATS
+        value: "false"
