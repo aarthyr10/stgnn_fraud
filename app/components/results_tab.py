@@ -323,7 +323,7 @@ def _render_report_assets(artefact_paths: dict) -> None:
         tint="application",
     ), unsafe_allow_html=True)
     for png in pngs:
-        st.image(str(png), use_container_width=True)
+        st.image(str(png), width="stretch")
     st.markdown(section_close(), unsafe_allow_html=True)
 
 
