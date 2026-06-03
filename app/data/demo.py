@@ -171,7 +171,7 @@ def generate_demo_graph(spec: DemoSpec | None = None) -> Data:
         all_global.extend(range(cumulative, cumulative + n))
         cumulative += n
 
-    x = torch.from_numpy(np.concatenate(all_x, axis=0))
+    x = torch.from_numpy(np.concatenate(all_x, axis=0).astype(np.float32))
     t = torch.from_numpy(np.concatenate(all_t, axis=0))
     y = torch.from_numpy(np.concatenate(all_y, axis=0))
     node_id = torch.tensor(all_global, dtype=torch.long)

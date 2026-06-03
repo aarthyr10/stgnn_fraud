@@ -97,17 +97,13 @@ ruff check .
 scripts ignore `E402` because they must extend `sys.path` before
 importing the `app` package.
 
-## Deploy with Docker on Render (display-only)
+## Deploy with Docker on Render
 
-The deployed site is **display-only**: it never trains. You run the
-pipeline locally, commit the results, push, and the site shows them.
-This is controlled by `STGNN_DISPLAY_ONLY=true` (set in `Dockerfile` and
-`render.yaml`); in that mode the Pipeline tab hides its run controls and
-the Dashboard, Results, and History tabs render the published metrics.
-
-Only two artefacts are needed for display and they are git-tracked:
-`artefacts/metrics.json` and `artefacts/run_history.jsonl`. The heavy
-model weights stay ignored — the display tabs do not load them.
+The app ships as a Docker image and runs on Render (or any container
+host). The Pipeline tab lets you run training in-app, and the committed
+`artefacts/metrics.json` + `artefacts/run_history.jsonl` mean the
+Dashboard, Results, and History tabs already show your latest published
+run on first load.
 
 ### Publish a new result
 
@@ -156,9 +152,9 @@ Notes:
 
 - `requirements.txt` pins the CPU-only PyTorch wheel index, which keeps
   the image small and the build fast.
-- The display-only site is light; the Standard plan is comfortable. Drop
-  `STGNN_DISPLAY_ONLY` (or set it to `false`) only if you intend to run
-  training inside the container, which needs ~2 GB or more.
+- Use the **Standard** plan or larger. Running training in-app loads
+  PyTorch and needs ~2 GB; the free/starter 512 MB tiers will run out of
+  memory.
 
 ## Environment overrides
 
@@ -173,4 +169,3 @@ Notes:
 | `STGNN_METRICS_PATH` | `artefacts/metrics.json` |
 | `STGNN_RF_PATH` | `artefacts/rf_baseline.pkl` |
 | `STGNN_HISTORY_PATH` | `artefacts/run_history.jsonl` |
-| `STGNN_DISPLAY_ONLY` | `false` (set `true` to disable in-app training) |

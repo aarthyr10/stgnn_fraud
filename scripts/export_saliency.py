@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT))
 import numpy as np
 import torch
 
-from app.data.loader import LABEL_ILLICIT
+from app.data.loader import LABEL_ILLICIT, NUM_TIMESTEPS
 from app.data.snapshots import time_split
 from app.services.cache import (
     get_embeddings,
@@ -46,7 +46,6 @@ def main() -> None:
     ap.add_argument("--head", default="artefacts/gru_head.pt")
     ap.add_argument("--embeddings", default="artefacts/embeddings.parquet")
     ap.add_argument("--node-id", type=int, default=-1)
-    ap.add_argument("--min-history", type=int, default=5)
     ap.add_argument("--out-dir", default="artefacts/report_assets")
     args = ap.parse_args()
 
@@ -57,7 +56,8 @@ def main() -> None:
     node_ids = get_node_ids(args.data_dir, args.graph_cache)
     embeds_df = get_embeddings(args.embeddings)
     embed_cols = [c for c in embeds_df.columns if c.startswith("e")]
-    by_id = {nid: g.sort_values("t")
+    embed_dim = len(embed_cols)
+    by_id = {int(nid): g.sort_values("t")
              for nid, g in embeds_df.groupby("node_id")}
 
     if args.node_id >= 0:
@@ -69,23 +69,33 @@ def main() -> None:
     seq_df = None
     for nid in candidates:
         g = by_id.get(int(nid))
-        if g is not None and len(g) >= args.min_history:
+        if g is not None and len(g) >= 1:
             chosen = int(nid)
             seq_df = g
             break
 
     if chosen is None:
-        print("No illicit node with enough embedding history found.")
+        print(
+            f"No illicit node found in {args.embeddings}. The embeddings may "
+            "be from a different graph; regenerate them for this data:\n"
+            f"  python -m scripts.run_pipeline --data-dir {args.data_dir} "
+            "--force-retrain --alpha 5 --beta 10 --em-iter 12 "
+            "--init-mode blend --seed 1337 --note frozen-seed1337"
+        )
         return
 
-    weeks = [int(t) for t in seq_df["t"].tolist()]
-    seq = torch.tensor(
-        seq_df[embed_cols].values, dtype=torch.float32,
-    ).unsqueeze(0)
+    own_weeks = [int(t) for t in seq_df["t"].tolist()]
+    emb = seq_df[embed_cols].to_numpy(dtype=np.float32)
+    seq_full = np.zeros((NUM_TIMESTEPS, embed_dim), dtype=np.float32)
+    for t, vec in zip(own_weeks, emb):
+        if 1 <= t <= NUM_TIMESTEPS:
+            seq_full[t - 1] = vec
+    seq = torch.from_numpy(seq_full).unsqueeze(0)
 
     model = get_hybrid(args.gcn, args.head)
     sal = gru_saliency(model, seq, target_class=LABEL_ILLICIT)
     values = np.asarray(sal.saliency, dtype=float)
+    weeks = list(range(1, len(values) + 1))
 
     order = np.argsort(values)[::-1]
     top = [(weeks[i], float(values[i])) for i in order[:3]]
@@ -93,9 +103,9 @@ def main() -> None:
 
     csv_path = out_dir / f"gru_saliency_node{chosen}.csv"
     with open(csv_path, "w") as fh:
-        fh.write("week,saliency\n")
+        fh.write("week,saliency,is_observed_week\n")
         for w, v in zip(weeks, values):
-            fh.write(f"{w},{v:.6f}\n")
+            fh.write(f"{w},{v:.6f},{int(w in own_weeks)}\n")
 
     png_path = out_dir / f"gru_saliency_node{chosen}.png"
     made_png = False
@@ -104,18 +114,20 @@ def main() -> None:
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
-        fig, ax = plt.subplots(figsize=(10, 4.2))
+        fig, ax = plt.subplots(figsize=(11, 4.2))
         colors = ["#D1366B" if abs(w - SHUTDOWN_T) <= 2 else "#5B4BE3"
                   for w in weeks]
         ax.bar(weeks, values, color=colors)
-        ax.axvline(SHUTDOWN_T, color="#0B0F1A", linestyle=":",
-                   linewidth=1.5)
+        ax.axvline(SHUTDOWN_T, color="#0B0F1A", linestyle=":", linewidth=1.5)
         ax.text(SHUTDOWN_T, ax.get_ylim()[1] * 0.95, " shutdown t=43",
                 fontsize=9, va="top")
+        for w in own_weeks:
+            ax.axvline(w, color="#0F9E73", linewidth=1.0, alpha=0.5)
         ax.set_xlabel("Week")
         ax.set_ylabel("Saliency (|gradient|)")
         ax.set_title(
-            f"GRU temporal saliency, illicit node {chosen}",
+            f"GRU temporal saliency, illicit node {chosen} "
+            f"(observed week {own_weeks[0]})",
             fontsize=12,
         )
         fig.tight_layout()
@@ -126,13 +138,15 @@ def main() -> None:
 
     print("=" * 60)
     print(f"illicit node        : {chosen}")
-    print(f"weeks in sequence   : {weeks[0]}..{weeks[-1]} ({len(weeks)} steps)")
+    print(f"observed week(s)    : {own_weeks}")
     print("top-3 spike weeks   : "
           + ", ".join(f"t={w} ({v:.3f})" for w, v in top))
     if near_shutdown:
         print(f"spikes near shutdown: YES (weeks {near_shutdown})")
     else:
-        print("spikes near shutdown: NO (no top-3 spike within 2 weeks of t=43)")
+        print("spikes near shutdown: NO (no top-3 within 2 weeks of t=43)")
+    print("note                : each transaction is observed in one week, "
+          "so saliency concentrates at its own week.")
     print(f"csv  -> {csv_path}")
     print(f"png  -> {png_path}" if made_png
           else "png  -> skipped (pip install matplotlib to enable)")

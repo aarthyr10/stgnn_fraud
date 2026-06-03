@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import time
 from pathlib import Path
 
@@ -750,112 +749,11 @@ def _render_run(
     return metrics
 
 
-def _display_only() -> bool:
-    return os.getenv("STGNN_DISPLAY_ONLY", "").strip().lower() in (
-        "1", "true", "yes", "on",
-    )
-
-
-_STATIC_STEPS = [
-    (
-        "Step 1", "Load and slice dataset",
-        "Elliptic graph cut into 49 weekly snapshots under a strict-"
-        "inductive split.",
-        "Windows",
-        [("Train t", "1..34"), ("Eval t", "35..49"),
-         ("Post-shutdown", "43..49"), ("Features", "166")],
-        "Per-week node and edge tensors.",
-    ),
-    (
-        "Step 2", "GCN spatial subnet (frozen)",
-        "Two GCNConv layers learn each node from its neighbourhood, "
-        "then freeze.",
-        "Encoder", [("Layers", "2"), ("Role", "spatial")],
-        "Node embeddings.",
-    ),
-    (
-        "Step 3", "Precompute embeddings",
-        "The frozen GCN runs over every snapshot once.",
-        "Cache", [("File", "embeddings.parquet")],
-        "Per-(node, week) vectors.",
-    ),
-    (
-        "Step 4", "GRU temporal head",
-        "Reads each node's embedding sequence week to week.",
-        "Encoder", [("Role", "temporal")],
-        "Softmax posteriors.",
-    ),
-    (
-        "Step 5", "Random Forest baseline",
-        "500 trees on the raw labelled training nodes (Maganti 2026 "
-        "reference).",
-        "Reference", [("Target F1", "~0.82")],
-        "Per-timestep posteriors.",
-    ),
-    (
-        "Step 6", "Prior tracker",
-        "C1 none, C2 batch Saerens-EM, C3 online per-timestep "
-        "(the contribution).",
-        "Knobs", [("alpha", "set"), ("beta", "set"), ("EM iters", "set")],
-        "Re-weighted posteriors.",
-    ),
-    (
-        "Step 7", "Score conditions",
-        "PR-AUC, Recall@5%FPR, F1, F1@t>=43, Spearman rho.",
-        "Thresholds", [("Oracle", "yes"), ("Deployable", "yes")],
-        "metrics.json.",
-    ),
-    (
-        "Step 8", "Publish results",
-        "Append the run to history; this display site reads the result.",
-        "Logs", [("File", "run_history.jsonl")],
-        "Dashboard and Results update.",
-    ),
-]
-
-
-def _render_static_flow() -> None:
-    st.markdown(section_open(
-        "Pipeline flow",
-        eyebrow="Both encoders, three prior-correction conditions each",
-        tint="application",
-    ), unsafe_allow_html=True)
-    for i, step in enumerate(_STATIC_STEPS, 1):
-        status_title, action, detail, data_eyebrow, stats, result = step
-        if i == 2:
-            st.markdown(encoder_banner(
-                "GCN-GRU (Pareja 2020 backbone)",
-                "Encoder 1 of 2", "Frozen subnet -> GRU head",
-            ), unsafe_allow_html=True)
-        if i == 5:
-            st.markdown(encoder_banner(
-                "Random Forest (Maganti 2026 reference)",
-                "Encoder 2 of 2", "166 raw features",
-            ), unsafe_allow_html=True)
-        st.markdown(step_row(
-            i, "done",
-            step_card_body(status_title, action, detail),
-            step_card_body(data_eyebrow, "Inputs", "", stats),
-            step_card_body("Output", result),
-        ), unsafe_allow_html=True)
-    st.markdown(section_close(), unsafe_allow_html=True)
-
-
 def render_pipeline_tab(
     artefact_paths: dict, data_dir: str, graph_cache: str,
 ) -> None:
     st.markdown('<h2 style="margin-top:0">Pipeline</h2>',
                 unsafe_allow_html=True)
-
-    if _display_only():
-        st.info(
-            "Display-only deployment. Training runs are executed locally "
-            "and the results are published here; the flow below is shown "
-            "for reference. Open the Results and Dashboard tabs for the "
-            "latest published metrics."
-        )
-        _render_static_flow()
-        return
 
     with st.expander("Tracker settings", expanded=False):
         cols = st.columns(4)
