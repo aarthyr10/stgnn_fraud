@@ -67,13 +67,38 @@ On the **first run** the app will:
 
 ## Using the real Elliptic dataset
 
-Drop the three real CSVs into `data/elliptic/` to switch over:
+The Elliptic Bitcoin dataset is **not committed to this repository** (it is
+~600 MB and redistributed under its own terms). Download it yourself and
+place the three CSVs in `data/elliptic/`.
+
+### Download
+
+The dataset is published on Kaggle as
+[**Elliptic Data Set** (`ellipticco/elliptic-data-set`)](https://www.kaggle.com/datasets/ellipticco/elliptic-data-set).
+
+Using the [Kaggle CLI](https://github.com/Kaggle/kaggle-api) (`pip install kaggle`,
+then add your API token to `~/.kaggle/kaggle.json`):
+
+```bash
+kaggle datasets download -d ellipticco/elliptic-data-set -p data/elliptic --unzip
+```
+
+Or download the archive from the Kaggle page in a browser and unzip it. The
+archive contains an `elliptic_bitcoin_dataset/` folder with the three CSVs.
+
+### Where to put the files
+
+Move the CSVs so the layout is exactly:
 
 ```
 data/elliptic/elliptic_txs_features.csv
 data/elliptic/elliptic_txs_edgelist.csv
 data/elliptic/elliptic_txs_classes.csv
 ```
+
+These paths are git-ignored, so they will never be committed. Override the
+location with the `STGNN_DATA_DIR` environment variable if you store the data
+elsewhere.
 
 Then run the full training pipeline (the demo artefacts are ignored once
 real weights exist):
@@ -169,3 +194,11 @@ Notes:
 | `STGNN_METRICS_PATH` | `artefacts/metrics.json` |
 | `STGNN_RF_PATH` | `artefacts/rf_baseline.pkl` |
 | `STGNN_HISTORY_PATH` | `artefacts/run_history.jsonl` |
+
+## License
+
+Released under the [MIT License](LICENSE) © 2026 Aarthy.
+
+The Elliptic Bitcoin dataset is **not** covered by this license; it is
+distributed separately under its own terms (see the
+[Kaggle page](https://www.kaggle.com/datasets/ellipticco/elliptic-data-set)).

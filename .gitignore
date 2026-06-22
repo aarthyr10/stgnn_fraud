@@ -1,39 +1,63 @@
-.venv/
-venv/
-env/
-
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
 *.egg-info/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Caches
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
 .ipynb_checkpoints/
 
+# ---------------------------------------------------------------------------
+# Environment / secrets
+# ---------------------------------------------------------------------------
 .env
 .env.*
 !.env.example
+.streamlit/secrets.toml
 
+# ---------------------------------------------------------------------------
+# Editor / OS
+# ---------------------------------------------------------------------------
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
 
+# ---------------------------------------------------------------------------
+# Logs and scratch text dumps (keep requirements.txt)
+# ---------------------------------------------------------------------------
 *.log
 *.txt
 !requirements.txt
 
+# ---------------------------------------------------------------------------
+# Generated docs / notes (keep README)
+# ---------------------------------------------------------------------------
+*.md
+!README.md
+
+# ---------------------------------------------------------------------------
+# Datasets — download separately (see README). Do not commit.
+# ---------------------------------------------------------------------------
+*.csv
+data/elliptic/*.csv
+!data/elliptic/.gitkeep
+
+# ---------------------------------------------------------------------------
+# Run artefacts — keep only the published metrics the dashboards read
+# ---------------------------------------------------------------------------
 artefacts/*
 !artefacts/metrics.json
 !artefacts/run_history.jsonl
-
-.streamlit/secrets.toml
-
-!data/
-!data/**
-
-*.md
-!README.md
-data/.DS_Store
-*.csv
