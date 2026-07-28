@@ -20,6 +20,7 @@ import streamlit as st
 
 from app.components.dashboard_tab import render_dashboard_tab
 from app.components.dataset_tab import render_dataset_tab
+from app.components.ensemble_tab import render_ensemble_tab
 from app.components.history_tab import render_history_tab
 from app.components.pipeline_tab import render_pipeline_tab
 from app.components.results_tab import render_results_tab
@@ -99,8 +100,10 @@ def main() -> None:
         "STGNN_GRAPH_CACHE", str(ROOT / "artefacts" / "graph.pkl"),
     )
 
-    tab_dash, tab_pipe, tab_results, tab_hist, tab_data = st.tabs(
-        ["Dashboard", "Pipeline", "Results", "History", "Dataset"],
+    (tab_dash, tab_pipe, tab_results, tab_ens, tab_hist,
+     tab_data) = st.tabs(
+        ["Dashboard", "Pipeline", "Results", "Ensemble", "History",
+         "Dataset"],
     )
     with tab_dash:
         render_dashboard_tab(artefact_paths)
@@ -108,6 +111,8 @@ def main() -> None:
         render_pipeline_tab(artefact_paths, data_dir, graph_cache)
     with tab_results:
         render_results_tab(artefact_paths)
+    with tab_ens:
+        render_ensemble_tab(artefact_paths)
     with tab_hist:
         render_history_tab(artefact_paths)
     with tab_data:

@@ -339,17 +339,27 @@ def _recall_at_fpr(y_true: np.ndarray, score: np.ndarray,
 def _f1_max_with_threshold(
     y_true: np.ndarray, score: np.ndarray,
 ) -> tuple[float, float]:
+    """Max F1 and the threshold that actually attains it.
+
+    ``precision_recall_curve`` returns ``len(thresholds) + 1`` points: entry
+    ``i`` pairs with ``thresholds[i]`` for ``i < len(thresholds)``, and the
+    final entry (precision 1, recall 0) has no threshold.  Indexing
+    ``thresholds[idx - 1]`` returns the neighbouring operating point, so the
+    exported ``decision_threshold`` did not reproduce the reported F1 (about
+    0.004 low on this data) and every metric computed *at* that threshold --
+    ``per_timestep_f1``, the shared-threshold F1 -- inherited the error.
+    """
     if y_true.size == 0 or (y_true == LABEL_ILLICIT).sum() == 0:
         return 0.0, 0.5
     prec, rec, thr = precision_recall_curve(
         y_true, score, pos_label=LABEL_ILLICIT,
     )
+    if thr.size == 0:
+        return 0.0, 0.5
     denom = np.clip(prec + rec, 1e-12, None)
     f1 = 2.0 * prec * rec / denom
-    idx = int(np.nanargmax(f1))
-    if idx == 0 or idx > len(thr):
-        return float(f1[idx]), 0.5
-    return float(f1[idx]), float(thr[idx - 1])
+    idx = int(np.nanargmax(f1[:-1]))
+    return float(f1[idx]), float(thr[min(idx, thr.size - 1)])
 
 
 def _f1_at_threshold(

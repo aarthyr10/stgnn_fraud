@@ -111,6 +111,64 @@ python -m training.train_tgat --epochs 150 --seed 42
 python -m training.evaluate
 ```
 
+## The stacking ensemble study
+
+The **Ensemble** tab is driven by a separate multi-seed study that adds an
+error-decorrelated stacking ensemble on top of the prior-tracking head, and
+the statistics needed to decide whether its gains are real.
+
+| Layer | Files |
+|-------|-------|
+| Feature enrichment | `app/services/enrichment.py` (topological, node2vec, delta, **causal** wavelet) |
+| Base learners + stack | `app/services/ensemble.py` |
+| Statistics | `app/services/deep_analysis.py` (bootstrap, paired tests, calibration, cost curves, drift) |
+| Presentation | `app/components/ensemble_tab.py` |
+
+Five base learners — Random Forest, XGBoost, LightGBM, logistic regression
+and the frozen GCN-GRU — feed four meta-learners fitted on a held-out
+validation window. The online Saerens-EM head is then applied to the stack
+and, as the encoder-independent control, to the Random Forest alone.
+
+Two temporal protocols run side by side:
+
+```
+legacy      train 1-34,  test 35-49            reference gate only
+leak-aware  train 1-34,  validate 35-41,  test 42-49    everything else
+```
+
+The legacy split has no validation window, so a meta-learner fitted under it
+would have to reuse test data; it is kept purely so the Random Forest can be
+checked against the published F1 ≈ 0.830.
+
+### Running it
+
+```bash
+python -m scripts.build_enrichment_cache        # ~45 min, cached and resumable
+python -m scripts.train_gnn_bases               # one GCN-GRU per seed
+python -m scripts.run_ensemble_study            # 10 seeds
+python -m scripts.aggregate_ensemble_study --out artefacts/ensemble_study.json
+python -m scripts.build_ensemble_report --out artefacts/ensemble_report.html
+```
+
+Each stage caches, so a re-run only redoes what changed. The Ensemble tab
+picks up `artefacts/ensemble_study.json` automatically (override with
+`STGNN_ENSEMBLE_PATH`).
+
+### Reading the numbers
+
+Every system reports four thresholding conventions, and they must never be
+compared across:
+
+| convention | uses test labels? | meaning |
+|---|---|---|
+| whole-window oracle | yes | threshold tuned on weeks 42–49, applied post-43 |
+| post-subset oracle | yes | threshold tuned on weeks 43–49 — the upper bound |
+| validation-fitted | **no** | threshold tuned on weeks 35–41 — deployable |
+| prior-matched | **no** | flag the top `q_t` of each week from the tracked rate |
+
+`AUDIT_ENSEMBLE.md` records what an earlier ensemble implementation got
+right, what deviated from the paper, and what each correction changed.
+
 ## Tests and linting
 
 ```bash

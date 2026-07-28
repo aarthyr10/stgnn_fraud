@@ -11,4 +11,11 @@ select = ["E", "F", "W", "I"]
 "scripts/export_saliency.py" = ["E402"]
 "scripts/build_dashboard.py" = ["E501"]
 "scripts/diagnose.py" = ["E501"]
+# these two embed HTML / notebook-cell source as string literals
+"scripts/build_ensemble_report.py" = ["E501"]
+"scripts/append_notebook_sections.py" = ["E501"]
+"scripts/*.py" = ["E402"]
 "training/*.py" = ["E402"]
+# the pipeline notebook is authored for readability, not for the linter
+# Part II is written to run standalone, so it re-imports deliberately
+"*.ipynb" = ["E402", "E501", "E702", "E401", "F401", "F811", "I001"]
