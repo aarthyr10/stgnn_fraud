@@ -15,6 +15,7 @@ C2_POST_F1_HIGH = 0.20
 C3_POST_F1_THRESHOLD = 0.18
 RHO_THRESHOLD = 0.7
 RF_F1_THRESHOLD = 0.78
+PAGE_SIZES = [10, 25, 50, 100]
 
 VERDICT_COLUMNS = [
     ("C1 F1 ~ 0.69", "Proposal (a): uncorrected aggregate F1(illicit) approx 0.69"),
@@ -189,11 +190,12 @@ def render_history_tab(artefact_paths: dict) -> None:
 
     rows = history_rows(records)
     df = _df_from_rows(rows)
+    df = df.iloc[::-1].reset_index(drop=True)   # newest run first
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Total runs", len(df))
     if not df.empty:
-        c2.metric("Latest run", df.iloc[-1]["Time"])
+        c2.metric("Latest run", df.iloc[0]["Time"])
         best_c3 = df["C3 PR-AUC"].astype(float).max()
         c3.metric("Best C3 PR-AUC", f"{best_c3:.3f}"
                   if best_c3 == best_c3 else "—")
@@ -203,11 +205,31 @@ def render_history_tab(artefact_paths: dict) -> None:
 
     st.markdown(section_open(
         "Verdict table",
-        eyebrow="PASS / FAIL on the five headline claims, one row per run",
+        eyebrow="PASS / FAIL on the five headline claims, newest run first",
         tint="model",
     ), unsafe_allow_html=True)
 
-    st.markdown(_verdict_table_html(df), unsafe_allow_html=True)
+    pc1, pc2, _pc3 = st.columns([1, 1, 3])
+    with pc1:
+        per_page = int(st.selectbox(
+            "Rows per page", PAGE_SIZES, index=0, key="history_page_size",
+        ))
+    n_pages = max(1, -(-len(df) // per_page))
+    if int(st.session_state.get("history_page", 1) or 1) > n_pages:
+        st.session_state["history_page"] = n_pages   # page size changed
+    with pc2:
+        page = int(st.number_input(
+            "Page", min_value=1, max_value=n_pages, value=1, step=1,
+            key="history_page",
+        ))
+    start = (page - 1) * per_page
+    page_df = df.iloc[start:start + per_page]
+    st.caption(
+        f"Showing runs {start + 1}-{min(start + per_page, len(df))} "
+        f"of {len(df)} (newest first) - page {page} of {n_pages}"
+    )
+
+    st.markdown(_verdict_table_html(page_df), unsafe_allow_html=True)
 
     pass_counts = {short: 0 for short, _ in VERDICT_COLUMNS}
     total = 0
@@ -224,7 +246,7 @@ def render_history_tab(artefact_paths: dict) -> None:
             for short, _full in VERDICT_COLUMNS
         ]
         st.markdown(
-            "<div class='app-caption'>"
+            "<div class='app-caption'>Across all runs &nbsp;·&nbsp; "
             + " &nbsp;·&nbsp; ".join(summary_bits)
             + "</div>",
             unsafe_allow_html=True,

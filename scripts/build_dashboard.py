@@ -5,11 +5,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CS = ROOT / "artefacts" / "current_state"
+ART = ROOT / "artefacts"
+
+
+def _newest(name: str) -> Path:
+    """Prefer the live artefact, fall back to the current_state snapshot."""
+    live, snap = ART / name, CS / name
+    if live.exists() and (
+        not snap.exists() or live.stat().st_mtime >= snap.stat().st_mtime
+    ):
+        return live
+    return snap
 
 
 def load_history():
     rows = []
-    with open(CS / "run_history.jsonl") as f:
+    with open(_newest("run_history.jsonl")) as f:
         for line in f:
             try:
                 rows.append(json.loads(line))
@@ -19,7 +30,7 @@ def load_history():
 
 
 def load_metrics():
-    p = CS / "metrics.json"
+    p = _newest("metrics.json")
     if not p.exists():
         return None
     with open(p) as f:

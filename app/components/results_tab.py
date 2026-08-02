@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 import plotly.graph_objects as go
 import streamlit as st
 
+from app.components.ensemble_tab import render_ensemble_summary
 from app.utils.theme import (
     CHART,
     CONDITION_COLOURS,
@@ -54,6 +56,52 @@ def _load_metrics(artefact_paths: dict) -> dict | None:
             return json.load(fh)
     except Exception:
         return None
+
+
+def _metrics_from_history(artefact_paths: dict) -> dict | None:
+    """Rebuild a partial metrics dict from the newest run_history record.
+
+    Used when metrics.json is absent (e.g. a retrain is mid-flight) so the
+    Results tab still shows the latest completed run.
+    """
+    hist = artefact_paths.get("history")
+    if not hist:
+        return None
+    p = Path(hist)
+    if not p.exists():
+        return None
+    last = None
+    try:
+        with open(p) as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    last = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+    except OSError:
+        return None
+    if not last:
+        return None
+    out: dict = {}
+    for flat, val in (last.get("metrics") or {}).items():
+        cond, _, key = flat.partition(".")
+        if key:
+            out.setdefault(cond, {})[key] = val
+    if not out:
+        return None
+    params = last.get("params") or {}
+    out["_meta"] = {
+        "generated_at": last.get("ts"),
+        "seed": params.get("seed"),
+        "alpha": params.get("alpha"),
+        "beta": params.get("beta"),
+        "source": "run_history.jsonl",
+        "note": last.get("note", ""),
+    }
+    return out
 
 
 def _scoreboard_chart(metrics: dict, metric_key: str,
@@ -342,11 +390,32 @@ def render_results_tab(artefact_paths: dict) -> None:
 
     metrics = _load_metrics(artefact_paths)
     if metrics is None:
+        metrics = _metrics_from_history(artefact_paths)
+    if metrics is None:
         st.warning(
             "No metrics on disk yet. Open the Pipeline tab and click "
             "Run pipeline to generate them."
         )
         return
+
+    meta = metrics.get("_meta", {})
+    generated_at = meta.get("generated_at")
+    if generated_at:
+        st.caption(
+            "Showing the most recent completed run · "
+            f"{datetime.fromtimestamp(int(generated_at)):%Y-%m-%d %H:%M:%S}"
+            f" · seed {meta.get('seed', '—')}"
+            f" · alpha {meta.get('alpha', '—')}"
+            f" · beta {meta.get('beta', '—')}"
+            " — every run is listed in the History tab."
+        )
+    if meta.get("source") == "run_history.jsonl":
+        st.info(
+            "metrics.json is not on disk (a retrain is probably in "
+            "flight), so the scoreboard below is rebuilt from the latest "
+            "run_history.jsonl record. Per-timestep charts need "
+            "metrics.json and stay empty until the run finishes."
+        )
 
     st.markdown(section_open(
         "Scoreboard",
@@ -409,6 +478,8 @@ def render_results_tab(artefact_paths: dict) -> None:
             config={"displayModeBar": False},
         )
 
+    render_ensemble_summary(artefact_paths)
+
     st.markdown(section_open(
         "Tracker trajectory",
         eyebrow="Online estimate vs true illicit rate",
@@ -419,6 +490,13 @@ def render_results_tab(artefact_paths: dict) -> None:
         width="stretch",
         config={"displayModeBar": False},
     )
+    if not any((metrics.get(c) or {}).get("estimated_q_illicit")
+               for c in ("gcn_gru_online", "rf_online")):
+        st.caption(
+            "Estimated q_t series are missing from metrics.json - only a "
+            "completed pipeline run writes them. Run the pipeline once to "
+            "fill in the tracker curves."
+        )
     st.markdown(section_close(), unsafe_allow_html=True)
 
     per_t_fig = _per_timestep_f1_chart(metrics)

@@ -54,6 +54,11 @@ def _load(artefact_paths: dict) -> dict | None:
         return None
 
 
+def load_study(artefact_paths: dict) -> dict | None:
+    """Public accessor for the aggregated ensemble study (or None)."""
+    return _load(artefact_paths)
+
+
 def _f(v, d=3) -> str:
     try:
         x = float(v)
@@ -241,6 +246,52 @@ def _cal_chart(A: dict) -> go.Figure:
     fig.update_yaxes(title="observed illicit fraction")
     fig.update_layout(hovermode="closest")
     return fig
+
+
+# --------------------------------------------------------------------------
+def render_ensemble_summary(artefact_paths: dict, *,
+                            key_prefix: str = "results") -> None:
+    """Compact ensemble comparison, embedded in the Results tab.
+
+    Silently does nothing when artefacts/ensemble_study.json is absent.
+    """
+    A = _load(artefact_paths)
+    if A is None:
+        return
+    S = A.get("summary", {})
+    rows = [(k, lbl) for k, lbl, _ in SYSTEMS if f"{k}.f1_post" in S]
+    if not rows:
+        return
+
+    st.markdown(section_open(
+        "Ensemble comparison",
+        f"{A.get('n_seeds', '?')} seeds · median over seeds · "
+        f"full study in the Ensemble tab",
+        "model"), unsafe_allow_html=True)
+
+    table = []
+    for k, lbl in rows:
+        post = S.get(f"{k}.f1_post", {})
+        dep = S.get(f"{k}.f1_post_deployable", {})
+        rho = S.get(f"{k}.rho", {})
+        table.append({
+            "System": lbl,
+            "post-43 F1": post.get("median"),
+            "95% CI": f"[{_f(post.get('lo'))}, {_f(post.get('hi'))}]",
+            "post-43 F1 (deployable)": dep.get("median"),
+            "tracking rho": rho.get("median"),
+        })
+    st.dataframe(pd.DataFrame(table).round(4), use_container_width=True,
+                 hide_index=True)
+    st.plotly_chart(_headline_chart(A), use_container_width=True,
+                    config=PLOTLY_CONFIG,
+                    key=f"{key_prefix}_ensemble_headline")
+    st.caption(
+        "Post-subset oracle threshold on every bar. The deployable column "
+        "uses no test labels. The single-run numbers elsewhere on this page "
+        "are one seed; these are medians across seeds."
+    )
+    st.markdown(section_close(), unsafe_allow_html=True)
 
 
 # --------------------------------------------------------------------------

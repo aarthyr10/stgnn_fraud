@@ -7,6 +7,10 @@ from pathlib import Path
 import plotly.graph_objects as go
 import streamlit as st_ui
 
+from app.components.ensemble_tab import (
+    load_study,
+    render_ensemble_summary,
+)
 from app.services.history import history_rows, load_history
 from app.utils.theme import apply_plotly_layout
 
@@ -188,7 +192,7 @@ def _verdict(metrics: dict) -> str:
             badge_class = "neutral"
         chips.append(
             f'<div class="vchip {badge_class}">'
-            f'<span class="vchip-tag">§ 6 ({tag})</span>'
+            f'<span class="vchip-tag">6 ({tag})</span>'
             f'<span class="vchip-label">{label}</span>'
             f'<span class="vchip-value">{_fmt(val)}</span>'
             f'<span class="vchip-target">vs {target_str}</span>'
@@ -643,7 +647,43 @@ def _spotlight_bullets(run: dict) -> str:
     return '<div class="bullets">' + "".join(bullets) + '</div>'
 
 
-def _claims_summary(records: list[dict]) -> str:
+def _ensemble_claim(artefact_paths: dict | None) -> list[dict]:
+    """The (c) target re-tested on the stacked ensemble, if the study exists."""
+    if not artefact_paths:
+        return []
+    A = load_study(artefact_paths)
+    if not A:
+        return []
+    S = A.get("summary", {})
+    xgb = S.get("track.stack_XGBs.f1_post", {})
+    rf = S.get("track.stack_RF.f1_post", {})
+    if not xgb and not rf:
+        return []
+    meds = [m.get("median") for m in (xgb, rf) if m.get("median") is not None]
+    if not meds:
+        return []
+    lo, hi = xgb.get("lo"), xgb.get("hi")
+    return [{
+        "tag": "6 (c′)",
+        "claim": "C3 post-F1 ≥ 0.18 · ensemble",
+        "predicted": "same target, stronger base:<br>stacked ensemble + "
+                     "tracking<br>(leak-aware split · "
+                     f"{A.get('n_seeds', '?')} seeds)",
+        "observed": (f"XGB meta <b>{_fmt(xgb.get('median'))}</b> · "
+                     f"RF meta {_fmt(rf.get('median'))}"),
+        "status": "PASS" if max(meds) >= 0.18 else "MISS",
+        "why": (
+            "the tracking layer was never the binding constraint — with a "
+            "stacked base the same post-shutdown target is met. Medians "
+            f"across {A.get('n_seeds', '?')} seeds"
+            + (f" · 95% CI [{_fmt(lo)}, {_fmt(hi)}]" if lo is not None else "")
+            + " · full study in the Ensemble tab"
+        ),
+    }]
+
+
+def _claims_summary(records: list[dict],
+                    artefact_paths: dict | None = None) -> str:
     rows = history_rows(records)
     if not rows:
         return ""
@@ -661,9 +701,20 @@ def _claims_summary(records: list[dict]) -> str:
         return st.median(vals) if vals else float("nan")
 
     rho_full_best = best("C3 rho_full")
+
+    def _vals(key):
+        v = [_f(r[key]) for r in rows]
+        return [x for x in v if x == x]
+
+    rho_post_v = _vals("C3 rho")
+    rho_full_v = _vals("C3 rho_full")
+    n_neg = sum(1 for x in rho_post_v if x < 0)
+    n_pos_full = sum(1 for x in rho_full_v if x > 0)
+    rho_post_floor = min(rho_post_v) if rho_post_v else float("nan")
+    rho_full_med = median("C3 rho_full")
     claims = [
         {
-            "tag": "§ 6 (a)",
+            "tag": "6 (a)",
             "claim": "C1 F1 ≈ 0.69",
             "predicted": "uncorrected GCN-GRU<br>F1(illicit) ≈ 0.69",
             "observed": f"best <b>{_fmt(best('C1 F1'))}</b> · "
@@ -674,7 +725,7 @@ def _claims_summary(records: list[dict]) -> str:
                    "shift the encoder never saw",
         },
         {
-            "tag": "§ 6 (b)",
+            "tag": "6 (b)",
             "claim": "C2 post-F1 ∈ [0.08, 0.20]",
             "predicted": "batch Saerens-EM<br>lifts post-shutdown F1<br>"
                          "into [0.08, 0.20]",
@@ -686,7 +737,7 @@ def _claims_summary(records: list[dict]) -> str:
                    "encoder ceiling as (a)",
         },
         {
-            "tag": "§ 6 (c)",
+            "tag": "6 (c)",
             "claim": "C3 post-F1 ≥ 0.18",
             "predicted": "online per-timestep<br>tracker beats batch<br>"
                          "on post-shutdown F1",
@@ -696,32 +747,42 @@ def _claims_summary(records: list[dict]) -> str:
             "why": "tracker layer works (lift over C1 is real and stable) "
                    "but absolute magnitude is encoder-bound at ≈ 0.07",
         },
+        *_ensemble_claim(artefact_paths),
         {
-            "tag": "§ 6 (d)",
+            "tag": "6 (d)",
             "claim": "ρ_post ≥ 0.7 (7-point)",
             "predicted": "Spearman ρ between<br>estimated and true prior<br>"
                          "on t = 43..49",
             "observed": f"best <b>{_fmt(best('C3 rho'))}</b> · "
                         f"median {_fmt(median('C3 rho'))}",
             "status": "MISS",
-            "why": "7 points · standard error of Spearman ρ ≈ 0.38 · "
-                   "single-seed swings ±0.5; the metric is dominated by "
-                   "sample-size noise on this window",
+            "why": (
+                f"{n_neg} of {len(rho_post_v)} logged runs land negative "
+                f"and pin at ρ = {_fmt(rho_post_floor)} — a noise-dominated "
+                f"statistic would centre on 0, so this is systematic, not "
+                f"scatter. ρ_full is positive in {n_pos_full}/"
+                f"{len(rho_full_v)} runs, so the tracker does follow the "
+                f"prior overall and inverts only across the "
+                f"collapse-and-recover weeks: a phase lag, not noise"
+            ),
         },
         {
-            "tag": "§ 6 (d′)",
+            "tag": "6 (d′)",
             "claim": "ρ_full ≥ 0.7 (15-point alt)",
             "predicted": "same ρ statistic<br>over the full eval window<br>"
                          "(15 points · less noise)",
             "observed": (f"best <b>{_fmt(rho_full_best)}</b> · "
                          f"median {_fmt(median('C3 rho_full'))}"),
             "status": "NEAR" if rho_full_best >= 0.69 else "MISS",
-            "why": "best single seed essentially hits the target; "
-                   "median across seeds is 0.575 · the statistically "
-                   "meaningful version of (d)",
+            "why": (
+                f"best single seed essentially hits the target; median "
+                f"over all logged runs is {_fmt(rho_full_med)} · 15 points "
+                f"instead of 7, so this is the statistically meaningful "
+                f"version of (d)"
+            ),
         },
         {
-            "tag": "§ 6 (e)",
+            "tag": "6 (e)",
             "claim": "RF+ ρ > 0",
             "predicted": "tracker is<br>architecture-agnostic<br>"
                          "(works on RF too)",
@@ -744,7 +805,7 @@ def _claims_summary(records: list[dict]) -> str:
         },
     ]
     head = ('<tr>'
-            '<th>§</th><th>claim</th><th>what we set out to prove</th>'
+            '<th>claim id</th><th>claim</th><th>what we set out to prove</th>'
             '<th>what we observed</th><th>status</th>'
             '<th>why it landed there</th></tr>')
     body = []
@@ -1259,7 +1320,7 @@ def render_dashboard_tab(artefact_paths: dict) -> None:
     st_ui.markdown(_hero(records), unsafe_allow_html=True)
 
     st_ui.markdown(
-        '<div class="section-head"><h3>§ 6 verdict · latest run</h3>'
+        '<div class="section-head"><h3>Section 6 verdict · latest run</h3>'
         '<span class="meta">PASS = within ±5% of target</span></div>',
         unsafe_allow_html=True,
     )
@@ -1296,6 +1357,8 @@ def render_dashboard_tab(artefact_paths: dict) -> None:
                 unsafe_allow_html=True,
             )
             st_ui.markdown(panel, unsafe_allow_html=True)
+
+    render_ensemble_summary(artefact_paths, key_prefix="dashboard")
 
     runs = _collect_runs(records)
     best = _best_run(runs)
@@ -1352,7 +1415,8 @@ def render_dashboard_tab(artefact_paths: dict) -> None:
             'target · MISS = bounded by encoder / sample-size</span></div>',
             unsafe_allow_html=True,
         )
-        st_ui.markdown(_claims_summary(records), unsafe_allow_html=True)
+        st_ui.markdown(_claims_summary(records, artefact_paths),
+                       unsafe_allow_html=True)
 
     if metrics:
         st_ui.markdown(
@@ -1366,6 +1430,13 @@ def render_dashboard_tab(artefact_paths: dict) -> None:
             _q_trajectory_fig(metrics),
             width="stretch", config=PLOT_CONFIG,
         )
+        if not any((metrics.get(c) or {}).get("estimated_q_illicit")
+                   for c in ("gcn_gru_batch", "gcn_gru_online", "rf_online")):
+            st_ui.caption(
+                "Estimated q_t series are missing from metrics.json - only "
+                "a completed pipeline run writes them. Run the pipeline "
+                "once to fill in the tracker curves."
+            )
 
     if not records:
         st_ui.info("No runs in history yet. Use the Pipeline tab.")

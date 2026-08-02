@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import json
 import time
 from pathlib import Path
@@ -43,6 +44,8 @@ from app.utils.theme import (
     step_card_body,
     step_row,
 )
+
+_CHART_SEQ = itertools.count()
 
 
 def _safe_get(d: dict, key: str, default=0.0):
@@ -352,7 +355,10 @@ def _render_run(
     )
 
     if force_retrain:
-        for k in ("gcn", "hybrid_head", "rf", "embeddings", "metrics"):
+        # metrics.json is deliberately kept: it is the only on-disk copy of
+        # the last completed run that the Results tab and the HTML builders
+        # read, and it is overwritten at the end of this run anyway.
+        for k in ("gcn", "hybrid_head", "rf", "embeddings"):
             p = Path(artefact_paths[k])
             if p.exists():
                 try:
@@ -578,6 +584,7 @@ def _render_run(
         ),
         width="stretch",
         config={"displayModeBar": False},
+        key=f"pipe_traj_gru_{seed}_{next(_CHART_SEQ)}",
     )
 
     sequence_box.markdown(
@@ -677,6 +684,7 @@ def _render_run(
         ),
         width="stretch",
         config={"displayModeBar": False},
+        key=f"pipe_traj_rf_{seed}_{next(_CHART_SEQ)}",
     )
 
     _render_step(
